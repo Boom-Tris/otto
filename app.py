@@ -41,9 +41,9 @@ def load_all_assets():
     print("--- 1. Loading all assets... ---")
     try:
         models = {
-            "clicks": load_model("lgbm_ranker_clicks.pkl"),
-            "carts": load_model("lgbm_ranker_carts.pkl"),
-            "orders": load_model("lgbm_ranker_orders.pkl")
+            "clicks": load_model("models/lgbm_ranker_clicks.pkl"),
+            "carts": load_model("models/lgbm_ranker_carts.pkl"),
+            "orders": load_model("models/lgbm_ranker_orders.pkl")
         }
         
         # (เราใช้ .joblib ตามที่ Notebook บันทึก)
