@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import joblib
 import lightgbm as lgb
-import gdown
 import os
 from collections import Counter
 
@@ -13,9 +12,6 @@ N_CANDIDATES_PER_SESSION = 200
 
 # --- ฟังก์ชันโหลดโมเดล ---
 def load_model(path):
-    """
-    โหลดโมเดล LightGBM อัตโนมัติ
-    """
     try:
         model = joblib.load(path)
         if hasattr(model, "predict"):
@@ -25,19 +21,18 @@ def load_model(path):
     except Exception:
         return lgb.Booster(model_file=path)
 
-# --- Lazy load assets ---
+# --- Lazy load assets แบบ memory-mapped ---
 @st.cache_resource(show_spinner=False)
 def load_assets():
     os.makedirs("assets", exist_ok=True)
 
-    # โหลด co_visitation_map จาก Google Drive
-    map_path = "assets/co_visitation_map.joblib"
+    # โหลด co_visitation_map แบบ memory-mapped
+    map_path = "assets/co_visitation_map_compressed.joblib"
     if not os.path.exists(map_path):
-        gdown.download(
-            "https://drive.google.com/uc?id=1YFHmmMXYzm0AtjakazsAziwNpk03hT58",
-            map_path,
-            quiet=False
-        )
+        st.error(f"❌ ไม่พบไฟล์ {map_path}")
+        st.stop()
+
+    co_visitation_map = joblib.load(map_path, mmap_mode='r')  # memory-mapped read-only
 
     # โหลดโมเดล
     models = {
@@ -46,12 +41,11 @@ def load_assets():
         "orders": load_model("assets/models/lgbm_ranker_orders.pkl")
     }
 
-    # โหลด map และ fallback
+    # โหลด fallback และ global popularity
     global_popularity_counter = joblib.load("assets/global_popularity_counter.joblib")
-    co_visitation_map = joblib.load(map_path)
     top_20_fallback = joblib.load("assets/top_20_fallback.joblib")
 
-    # ดึงชื่อ feature
+    # feature names
     if hasattr(models['clicks'], 'feature_name_'):
         feature_names = models['clicks'].feature_name_
     else:
@@ -59,8 +53,7 @@ def load_assets():
 
     return models, global_popularity_counter, co_visitation_map, top_20_fallback, feature_names
 
-
-# --- ฟังก์ชันจัดอันดับ Top 20 ---
+# --- ฟังก์ชัน Top 20 ---
 def get_top_20_recs(scores, candidates, fallback):
     ranked_candidates = [aid for _, aid in sorted(zip(scores, candidates), reverse=True)]
     top_20 = ranked_candidates[:20]
@@ -69,16 +62,14 @@ def get_top_20_recs(scores, candidates, fallback):
         top_20 = top_20[:20]
     return top_20
 
-
-# --- ฟังก์ชันรันโมเดล pipeline ---
+# --- Pipeline ---
 def run_model_pipeline(session_data, models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES):
     events = session_data["events"]
-    
     if not events:
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # --- Stage 1: Candidate Generation ---
+    # Stage 1: Candidate Generation
     session_candidate_pool = Counter()
     history_aids = [event['aid'] for event in events]
     history_aids_set = set(history_aids)
@@ -97,7 +88,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # --- Stage 2: Ranking Features ---
+    # Stage 2: Ranking
     session_length = len(events)
     history_aids_counter = Counter(history_aids)
     X_test_session_list = []
@@ -110,7 +101,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
 
     X_df = pd.DataFrame(X_test_session_list, columns=FEATURE_NAMES, index=final_candidate_list)
 
-    # --- Predict ---
+    # Predict
     try:
         if isinstance(models['clicks'], lgb.Booster):
             scores_clicks = models['clicks'].predict(X_df.values, num_iteration=models['clicks'].best_iteration)
@@ -140,38 +131,31 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
 
     return results, X_df.sort_values('score_orders', ascending=False)
 
-
 # --- Streamlit UI ---
-st.title("🧠 OTTO: Recommender System (v2 - 4 Features)")
+st.title("🧠 OTTO: Recommender System (v2 - Compressed & mmap)")
 
-# โหลด sample session JSON เล็ก (UI)
+# โหลด sample session JSON เล็ก
 try:
     samples = pd.read_json("test_trimmed.jsonl", lines=True, nrows=100)
 except Exception as e:
     st.error(f"ไม่พบหรืออ่านไฟล์ test_trimmed.jsonl ไม่ได้: {e}")
     st.stop()
 
-with st.container():
-    sample_index = st.selectbox("Choose Sample Session No.", samples.index)
-    selected_sample = samples.iloc[sample_index]
+sample_index = st.selectbox("Choose Sample Session No.", samples.index)
+selected_sample = samples.iloc[sample_index]
 
-with st.container(border=True, height=320):
-    st.write(f"**Session ID:** `{selected_sample['session']}`")
-    st.write("**Events (History):**")
-    st.json(selected_sample["events"])
+st.write(f"**Session ID:** `{selected_sample['session']}`")
+st.json(selected_sample["events"])
 
-with st.container():
-    if st.button("🚀 Run Prediction Pipeline", type="primary", use_container_width=True):
-        st.divider()
-        with st.spinner("Loading Models & Maps..."):
-            models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES = load_assets()
+if st.button("🚀 Run Prediction Pipeline"):
+    with st.spinner("Loading Models & Maps (Compressed + mmap)..."):
+        models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES = load_assets()
 
-        st.spinner("Finding Candidates and Ranking...")
+    with st.spinner("Finding Candidates and Ranking..."):
         results, features_df = run_model_pipeline(selected_sample, models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES)
 
-        st.subheader("🔮 Prediction Results (Top 20)")
-        st.json(results)
+    st.subheader("🔮 Prediction Results (Top 20)")
+    st.json(results)
 
-        st.divider()
-        st.subheader(f"📊 Features & Scores for {len(features_df)} Candidates")
-        st.dataframe(features_df.head(20))
+    st.subheader(f"📊 Features & Scores for {len(features_df)} Candidates")
+    st.dataframe(features_df.head(20))
