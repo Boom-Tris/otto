@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import lightgbm as lgb
+import gdown
 import os
 from collections import Counter
 
@@ -21,31 +22,34 @@ def load_model(path):
     except Exception:
         return lgb.Booster(model_file=path)
 
-# --- Lazy load assets แบบ memory-mapped ---
+# --- Lazy load assets จาก Google Drive ---
 @st.cache_resource(show_spinner=False)
 def load_assets():
     os.makedirs("assets", exist_ok=True)
+    os.makedirs("assets/models", exist_ok=True)
 
-    # โหลด co_visitation_map แบบ memory-mapped
-    map_path = "assets/co_visitation_map_compressed.joblib"
+    # --- โหลด co_visitation_map จาก Google Drive ---
+    map_path = "assets/co_visitation_map.joblib"
     if not os.path.exists(map_path):
-        st.error(f"❌ ไม่พบไฟล์ {map_path}")
-        st.stop()
+        gdown.download(
+            "https://drive.google.com/uc?id=1YFHmmMXYzm0AtjakazsAziwNpk03hT58",
+            map_path,
+            quiet=False
+        )
 
-    co_visitation_map = joblib.load(map_path, mmap_mode='r')  # memory-mapped read-only
-
-    # โหลดโมเดล
+    # --- โหลดโมเดล ---
     models = {
         "clicks": load_model("assets/models/lgbm_ranker_clicks.pkl"),
         "carts": load_model("assets/models/lgbm_ranker_carts.pkl"),
         "orders": load_model("assets/models/lgbm_ranker_orders.pkl")
     }
 
-    # โหลด fallback และ global popularity
+    # --- โหลด fallback และ global popularity ---
     global_popularity_counter = joblib.load("assets/global_popularity_counter.joblib")
+    co_visitation_map = joblib.load(map_path)
     top_20_fallback = joblib.load("assets/top_20_fallback.joblib")
 
-    # feature names
+    # --- feature names ---
     if hasattr(models['clicks'], 'feature_name_'):
         feature_names = models['clicks'].feature_name_
     else:
@@ -69,7 +73,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # Stage 1: Candidate Generation
+    # --- Stage 1: Candidate Generation ---
     session_candidate_pool = Counter()
     history_aids = [event['aid'] for event in events]
     history_aids_set = set(history_aids)
@@ -88,7 +92,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # Stage 2: Ranking
+    # --- Stage 2: Ranking ---
     session_length = len(events)
     history_aids_counter = Counter(history_aids)
     X_test_session_list = []
@@ -101,7 +105,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
 
     X_df = pd.DataFrame(X_test_session_list, columns=FEATURE_NAMES, index=final_candidate_list)
 
-    # Predict
+    # --- Predict ---
     try:
         if isinstance(models['clicks'], lgb.Booster):
             scores_clicks = models['clicks'].predict(X_df.values, num_iteration=models['clicks'].best_iteration)
@@ -132,7 +136,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
     return results, X_df.sort_values('score_orders', ascending=False)
 
 # --- Streamlit UI ---
-st.title("🧠 OTTO: Recommender System (v2 - Compressed & mmap)")
+st.title("🧠 OTTO: Recommender System (v2 - Load from Google Drive)")
 
 # โหลด sample session JSON เล็ก
 try:
@@ -148,7 +152,7 @@ st.write(f"**Session ID:** `{selected_sample['session']}`")
 st.json(selected_sample["events"])
 
 if st.button("🚀 Run Prediction Pipeline"):
-    with st.spinner("Loading Models & Maps (Compressed + mmap)..."):
+    with st.spinner("Downloading & Loading Models + Maps..."):
         models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES = load_assets()
 
     with st.spinner("Finding Candidates and Ranking..."):
