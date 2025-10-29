@@ -6,7 +6,6 @@ import gdown
 import os
 
 from collections import Counter
-from zipfile import ZipFile
 
 # --- ค่าคงที่ (ควรตั้งให้ตรงกับ Cell 2 ใน Notebook) ---
 # (นี่คือค่าจากโค้ดที่คุณส่งมา)
@@ -41,13 +40,7 @@ def load_all_assets():
     print("--- 0. Downloading co_visitation_map from Google Drive")
 
     if not os.path.exists("assets/co_visitation_map.joblib"):
-        gdown.download("https://drive.google.com/uc?id=1vW13WIB9z1FQinGwIbMlPjIXGWzBdNN4", "assets/co_visitation_map.joblib.zip", quiet=False)
-        
-        with ZipFile("assets/co_visitation_map.joblib.zip", "r") as zip_ref:
-            zip_ref.extractall("assets")
-        
-        os.remove("assets/co_visitation_map.joblib.zip")
-            
+        gdown.download("https://drive.google.com/uc?id=1YFHmmMXYzm0AtjakazsAziwNpk03hT58", "assets/co_visitation_map.joblib", quiet=False)
 
     # โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
     print("--- 1. Loading all assets... ---")
