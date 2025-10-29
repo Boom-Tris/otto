@@ -40,7 +40,7 @@ def load_all_assets():
     print("--- 0. Downloading co_visitation_map from Google Drive")
 
     if not os.path.exists("assets/co_visitation_map.joblib"):
-        gdown.download("https://drive.google.com/uc?id=1YFHmmMXYzm0AtjakazsAziwNpk03hT58", "assets/co_visitation_map.joblib", quiet=False)
+        gdown.download("https://drive.google.com/uc?id=1PMs1-swsSPwyH-_nL2IqX5Bz5p34mb9N", "assets/co_visitation_map.joblib", quiet=False)
 
     # โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
     print("--- 1. Loading all assets... ---")
