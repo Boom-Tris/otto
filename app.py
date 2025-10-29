@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import joblib
 import lightgbm as lgb
-from collections import Counter
-import numpy as np
+import gdown
 import os
+
+from collections import Counter
+from zipfile import ZipFile
 
 # --- ค่าคงที่ (ควรตั้งให้ตรงกับ Cell 2 ใน Notebook) ---
 # (นี่คือค่าจากโค้ดที่คุณส่งมา)
@@ -35,21 +37,31 @@ def load_model(path):
 # --- 1. โหลดทุกอย่าง (Models + Maps) ---
 @st.cache_resource
 def load_all_assets():
-    """
-    โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
-    """
+    # โหลด co_visitation_map จาก google drive
+    print("--- 0. Downloading co_visitation_map from Google Drive")
+
+    if not os.path.exists("assets/co_visitation_map.joblib"):
+        gdown.download("https://drive.google.com/uc?id=1vW13WIB9z1FQinGwIbMlPjIXGWzBdNN4", "assets/co_visitation_map.joblib.zip", quiet=False)
+        
+        with ZipFile("assets/co_visitation_map.joblib.zip", "r") as zip_ref:
+            zip_ref.extractall("assets")
+        
+        os.remove("assets/co_visitation_map.joblib.zip")
+            
+
+    # โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
     print("--- 1. Loading all assets... ---")
     try:
         models = {
-            "clicks": load_model("models/lgbm_ranker_clicks.pkl"),
-            "carts": load_model("models/lgbm_ranker_carts.pkl"),
-            "orders": load_model("models/lgbm_ranker_orders.pkl")
+            "clicks": load_model("assets/models/lgbm_ranker_clicks.pkl"),
+            "carts": load_model("assets/models/lgbm_ranker_carts.pkl"),
+            "orders": load_model("assets/models/lgbm_ranker_orders.pkl")
         }
         
         # (เราใช้ .joblib ตามที่ Notebook บันทึก)
-        global_popularity_counter = joblib.load("global_popularity_counter.joblib")
-        co_visitation_map = joblib.load("co_visitation_map.joblib")
-        top_20_fallback = joblib.load("top_20_fallback.joblib")
+        global_popularity_counter = joblib.load("assets/global_popularity_counter.joblib")
+        co_visitation_map = joblib.load("assets/co_visitation_map.joblib")
+        top_20_fallback = joblib.load("assets/top_20_fallback.joblib")
 
         # ดึงชื่อ Feature 4 ตัวจากโมเดล
         # (เราสมมติว่า model 'clicks' เป็น sklearn wrapper ที่มี .feature_name_)
@@ -205,13 +217,13 @@ def run_model_pipeline(session_data):
 if __name__ == "__main__":
     try:
         # (โหลดแค่ 100 แถวมาเป็นตัวอย่าง)
-        samples = pd.read_json(path_or_buf="test.jsonl", lines=True, nrows=100)
+        samples = pd.read_json(path_or_buf="test_trimmed.jsonl", lines=True, nrows=100)
     except FileNotFoundError:
-        st.error("❌ ไม่พบไฟล์ test.jsonl")
-        st.info("กรุณาดาวน์โหลดไฟล์ test.jsonl จาก Kaggle มาไว้ที่เดียวกับ app.py")
+        st.error("❌ ไม่พบไฟล์ test_trimmed.jsonl")
+        st.info("กรุณาดาวน์โหลดไฟล์ test_trimmed.jsonl จาก Kaggle มาไว้ที่เดียวกับ app.py")
         st.stop()
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการอ่าน test.jsonl: {e}")
+        st.error(f"เกิดข้อผิดพลาดในการอ่าน test_trimmed.jsonl: {e}")
         st.stop()
 
 
