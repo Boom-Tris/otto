@@ -38,23 +38,38 @@ def load_model(path):
 def load_all_assets():
     # โหลด co_visitation_map จาก google drive
     print("--- 0. Downloading co_visitation_map from Google Drive")
+    
+    if not os.path.exists("co_visitation_map.joblib"):
+        gdown.download("https://drive.google.com/uc?id=1PMs1-swsSPwyH-_nL2IqX5Bz5p34mb9N", "co_visitation_map.joblib", quiet=False)
+    
+    if not os.path.exists("top_20_fallback.joblib"):
+        gdown.download("https://drive.google.com/uc?id=14FwUZeiXM9ZRfyS45EMzOuAJtQkPRjSt", "top_20_fallback.joblib", quiet=False)
 
-    if not os.path.exists("assets/co_visitation_map.joblib"):
-        gdown.download("https://drive.google.com/uc?id=1PMs1-swsSPwyH-_nL2IqX5Bz5p34mb9N", "assets/co_visitation_map.joblib", quiet=False)
+    if not os.path.exists("global_popularity_counter.joblib"):
+        gdown.download("https://drive.google.com/uc?id=1Q5OdFMmGh34fw-ZYfcC3GwQ4d60932YQ", "global_popularity_counter.joblib", quiet=False)
+    
+    if not os.path.exists("lgbm_ranker_clicks.pkl"):
+        gdown.download("https://drive.google.com/uc?id=1oniZl-45sxldTYNeB8ruY_4VY2_TD02g", "lgbm_ranker_clicks.pkl", quiet=False)
+    
+    if not os.path.exists("lgbm_ranker_carts.pkl"):
+        gdown.download("https://drive.google.com/uc?id=1ZFD7d9ehJ-T5C4aErJ08UCiyP5mKbcri", "lgbm_ranker_carts.pkl", quiet=False)
+    
+    if not os.path.exists("lgbm_ranker_orders.pkl"):
+        gdown.download("https://drive.google.com/uc?id=1oWaLZi6Jzrc2YmSKqF3SnHorFGACcVQQ", "lgbm_ranker_orders.pkl", quiet=False)
 
     # โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
     print("--- 1. Loading all assets... ---")
     try:
         models = {
-            "clicks": load_model("assets/models/lgbm_ranker_clicks.pkl"),
-            "carts": load_model("assets/models/lgbm_ranker_carts.pkl"),
-            "orders": load_model("assets/models/lgbm_ranker_orders.pkl")
+            "clicks": load_model("lgbm_ranker_clicks.pkl"),
+            "carts": load_model("lgbm_ranker_carts.pkl"),
+            "orders": load_model("lgbm_ranker_orders.pkl")
         }
         
         # (เราใช้ .joblib ตามที่ Notebook บันทึก)
-        global_popularity_counter = joblib.load("assets/global_popularity_counter.joblib")
-        co_visitation_map = joblib.load("assets/co_visitation_map.joblib")
-        top_20_fallback = joblib.load("assets/top_20_fallback.joblib")
+        global_popularity_counter = joblib.load("global_popularity_counter.joblib")
+        co_visitation_map = joblib.load("co_visitation_map.joblib")
+        top_20_fallback = joblib.load("top_20_fallback.joblib")
 
         # ดึงชื่อ Feature 4 ตัวจากโมเดล
         # (เราสมมติว่า model 'clicks' เป็น sklearn wrapper ที่มี .feature_name_)

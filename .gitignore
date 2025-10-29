@@ -1,2 +1,5 @@
 .venv
 co_visitation_map.joblib
+global_popularity_counter.joblib
+top_20_fallback.joblib
+lgbm*
