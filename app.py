@@ -37,7 +37,7 @@ def load_model(path):
 @st.cache_resource
 def load_all_assets():
     # โหลด co_visitation_map จาก google drive
-    print("--- 0. Downloading co_visitation_map from Google Drive")
+    print("--- 0. Downloading assets from Google Drive")
     
     if not os.path.exists("co_visitation_map.joblib"):
         gdown.download("https://drive.google.com/uc?id=1PMs1-swsSPwyH-_nL2IqX5Bz5p34mb9N", "co_visitation_map.joblib", quiet=False)
@@ -56,6 +56,9 @@ def load_all_assets():
     
     if not os.path.exists("lgbm_ranker_orders.pkl"):
         gdown.download("https://drive.google.com/uc?id=1oWaLZi6Jzrc2YmSKqF3SnHorFGACcVQQ", "lgbm_ranker_orders.pkl", quiet=False)
+
+    if not os.path.exists("test_trimmed.jsonl"):
+        gdown.download("https://drive.google.com/uc?id=1Sx9S6iK76EeReugIlOqin68pcJsNa5Km", "test_trimmed.jsonl", quiet=False)
 
     # โหลด Model และ Maps ทั้งหมด (ใช้ cache เพื่อความเร็ว)
     print("--- 1. Loading all assets... ---")
