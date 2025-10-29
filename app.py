@@ -22,20 +22,34 @@ def load_model(path):
     except Exception:
         return lgb.Booster(model_file=path)
 
-# --- Lazy load assets จาก Google Drive ---
+# --- ฟังก์ชันโหลด assets + ดาวน์โหลด Google Drive ---
 @st.cache_resource(show_spinner=False)
 def load_assets():
     os.makedirs("assets", exist_ok=True)
     os.makedirs("assets/models", exist_ok=True)
 
     # --- โหลด co_visitation_map จาก Google Drive ---
-    map_path = "assets/co_visitation_map.joblib"
-    if not os.path.exists(map_path):
+    map_path_raw = "assets/co_visitation_map_raw.joblib"
+    map_path_compressed = "assets/co_visitation_map_compressed.joblib"
+
+    if not os.path.exists(map_path_raw):
         gdown.download(
             "https://drive.google.com/uc?id=1YFHmmMXYzm0AtjakazsAziwNpk03hT58",
-            map_path,
+            map_path_raw,
             quiet=False
         )
+    
+    # --- ลดขนาดไฟล์และ compress ---
+    if not os.path.exists(map_path_compressed):
+        st.info("Compressing co_visitation_map to reduce size...")
+        co_map_raw = joblib.load(map_path_raw)
+        # ตัด subset: top 40 co-visits ต่อ aid
+        co_map_subset = {aid: Counter(dict(c.most_common(40))) for aid, c in co_map_raw.items()}
+        joblib.dump(co_map_subset, map_path_compressed, compress=3)
+        del co_map_raw
+
+    # โหลด compressed map
+    co_visitation_map = joblib.load(map_path_compressed)
 
     # --- โหลดโมเดล ---
     models = {
@@ -44,9 +58,8 @@ def load_assets():
         "orders": load_model("assets/models/lgbm_ranker_orders.pkl")
     }
 
-    # --- โหลด fallback และ global popularity ---
+    # --- โหลด fallback + global popularity ---
     global_popularity_counter = joblib.load("assets/global_popularity_counter.joblib")
-    co_visitation_map = joblib.load(map_path)
     top_20_fallback = joblib.load("assets/top_20_fallback.joblib")
 
     # --- feature names ---
@@ -73,7 +86,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # --- Stage 1: Candidate Generation ---
+    # Stage 1: Candidate Generation
     session_candidate_pool = Counter()
     history_aids = [event['aid'] for event in events]
     history_aids_set = set(history_aids)
@@ -92,7 +105,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
         fallback_str = " ".join(map(str, top_20_fallback))
         return {"clicks": fallback_str, "carts": fallback_str, "orders": fallback_str}, pd.DataFrame(columns=FEATURE_NAMES)
 
-    # --- Stage 2: Ranking ---
+    # Stage 2: Ranking
     session_length = len(events)
     history_aids_counter = Counter(history_aids)
     X_test_session_list = []
@@ -105,7 +118,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
 
     X_df = pd.DataFrame(X_test_session_list, columns=FEATURE_NAMES, index=final_candidate_list)
 
-    # --- Predict ---
+    # Predict
     try:
         if isinstance(models['clicks'], lgb.Booster):
             scores_clicks = models['clicks'].predict(X_df.values, num_iteration=models['clicks'].best_iteration)
@@ -136,7 +149,7 @@ def run_model_pipeline(session_data, models, global_popularity_counter, co_visit
     return results, X_df.sort_values('score_orders', ascending=False)
 
 # --- Streamlit UI ---
-st.title("🧠 OTTO: Recommender System (v2 - Load from Google Drive)")
+st.title("🧠 OTTO: Recommender System (v2 - Auto Download + Compress)")
 
 # โหลด sample session JSON เล็ก
 try:
@@ -152,7 +165,7 @@ st.write(f"**Session ID:** `{selected_sample['session']}`")
 st.json(selected_sample["events"])
 
 if st.button("🚀 Run Prediction Pipeline"):
-    with st.spinner("Downloading & Loading Models + Maps..."):
+    with st.spinner("Downloading & Loading Models + Maps (compressed)..."):
         models, global_popularity_counter, co_visitation_map, top_20_fallback, FEATURE_NAMES = load_assets()
 
     with st.spinner("Finding Candidates and Ranking..."):
